@@ -8,9 +8,10 @@ use App\Http\Controllers\Api\PromotionController;
 use Illuminate\Support\Facades\Route;
 
 // ─── Public Routes (tanpa autentikasi) ───────────────────────────────────────
-
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login',    [AuthController::class, 'login']);
+Route::middleware('throttle:10,1')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login',    [AuthController::class, 'login']);
+});
 
 // Payment gateway webhook
 Route::post('/payments/callback', [PaymentController::class, 'handleCallback']);
@@ -28,6 +29,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout',  [AuthController::class, 'logout']);
     Route::get('/profile',  [AuthController::class, 'profile']);
+    Route::put('/profile',  [AuthController::class, 'updateProfile']);
+    Route::put('/password', [AuthController::class, 'updatePassword']);
+    
 
     // Booking
     Route::get('/bookings',                    [BookingController::class, 'index']);
@@ -42,14 +46,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // ─── Admin & Pemilik Lapangan ─────────────────────────────────────────────
 
     Route::middleware('role:administrator|pemilik_lapangan')->group(function () {
-
+        // CRUD COURT
         Route::post('/courts',           [CourtController::class, 'store']);
         Route::put('/courts/{court}',    [CourtController::class, 'update']);
         Route::delete('/courts/{court}', [CourtController::class, 'destroy']);
-
+        // CRUD PROMOTION
         Route::post('/promotions',              [PromotionController::class, 'store']);
         Route::put('/promotions/{promotion}',   [PromotionController::class, 'update']);
         Route::delete('/promotions/{promotion}',[PromotionController::class, 'destroy']);
+
+        Route::get('/courts/{court}/bookings', [BookingController::class, 'courtBookings']);
     });
 
     // ─── Admin Only ───────────────────────────────────────────────────────────

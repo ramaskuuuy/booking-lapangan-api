@@ -16,10 +16,13 @@ class PaymentController extends Controller
      */
     public function store(StorePaymentRequest $request): JsonResponse
     {
-        $payment = Payment::where('booking_id', $request->booking_id)->firstOrFail();
+        $payment = Payment::where('booking_id', $request->booking_id)
+            ->firstOrFail();
 
         if ($payment->status === 'paid') {
-            return response()->json(['message' => 'Booking ini sudah dibayar.'], 422);
+            return response()->json([
+                'message' => 'Booking ini sudah dibayar.',
+            ], 422);
         }
 
         $payment->update([
@@ -27,12 +30,15 @@ class PaymentController extends Controller
             'status'         => 'unpaid',
         ]);
 
-        // Di sini bisa integrasi dengan payment gateway (Midtrans, Xendit, dll)
+        // TODO: Integrasi Midtrans / Xendit
         // Contoh: kembalikan snap_token Midtrans ke frontend
+        // $snapToken = MidtransService::createTransaction($payment);
+
         return response()->json([
             'message' => 'Silakan lanjutkan pembayaran.',
             'payment' => $payment->load('booking.court'),
             'invoice' => $payment->generateInvoice(),
+            // 'snap_token' => $snapToken, // uncomment setelah integrasi Midtrans
         ]);
     }
 
@@ -48,34 +54,54 @@ class PaymentController extends Controller
 
     /**
      * Handle callback dari payment gateway (webhook)
+     * Return type diubah dari void ke JsonResponse
      */
-    public function handleCallback(Request $request): void
+    public function handleCallback(Request $request): JsonResponse
     {
         // Verifikasi signature dari payment gateway
+        // TODO: Tambahkan verifikasi signature Midtrans/Xendit di sini
+        // if (!$this->verifySignature($request)) {
+        //     return response()->json(['message' => 'Invalid signature.'], 403);
+        // }
+
         $transactionId = $request->input('transaction_id');
-        $orderId       = $request->input('order_id'); // booking_id
+        $orderId       = $request->input('order_id'); // ini booking_id
         $statusCode    = $request->input('status_code');
 
         if ($statusCode === '200') {
-            $payment = Payment::where('booking_id', $orderId)->firstOrFail();
+            $payment = Payment::where('booking_id', $orderId)->first();
+
+            if (! $payment) {
+                return response()->json(['message' => 'Payment tidak ditemukan.'], 404);
+            }
+
+            if ($payment->status === 'paid') {
+                return response()->json(['message' => 'Payment sudah diproses.'], 200);
+            }
+
             $payment->processPayment($transactionId);
         }
+
+        
+        return response()->json(['message' => 'OK'], 200);
     }
 
     /**
-     * Konfirmasi pembayaran manual (oleh admin)
+     * Konfirmasi pembayaran manual — hanya admin
      */
     public function confirm(Payment $payment): JsonResponse
     {
         if ($payment->status === 'paid') {
-            return response()->json(['message' => 'Pembayaran sudah terkonfirmasi.'], 422);
+            return response()->json([
+                'message' => 'Pembayaran sudah terkonfirmasi.',
+            ], 422);
         }
 
         $payment->processPayment('MANUAL-' . Str::upper(Str::random(10)));
 
         return response()->json([
             'message' => 'Pembayaran berhasil dikonfirmasi.',
-            'payment' => $payment->fresh()->load('booking'),
+            'payment' => $payment->fresh()->load('booking.court'),
         ]);
     }
 }

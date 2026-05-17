@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Requests\Auth\UpdateProfileRequest; 
+use App\Http\Requests\Auth\ChangePasswordRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +35,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Registrasi berhasil.',
             'user'    => $user,
+            'roles'   => $user->getRoleNames(),
             'token'   => $token,
         ], 201);
     }
@@ -54,6 +57,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Login berhasil.',
             'user'    => $user,
+            'roles'   => $user->getRoleNames(),
             'token'   => $token,
         ]);
     }
@@ -81,4 +85,42 @@ class AuthController extends Controller
             'permissions' => $request->user()->getAllPermissions()->pluck('name'),
         ]);
     }
+    /**
+     * Update profil user (nama, phone)
+     */
+    public function updateProfile(UpdateProfileRequest $request): JsonResponse
+    {
+        $request->user()->update($request->validated());
+ 
+        return response()->json([
+            'message' => 'Profil berhasil diperbarui.',
+            'user'    => $request->user()->fresh(),
+        ]);
+    }
+ 
+    /**
+     * Ganti password user
+     */
+    public function changePassword(ChangePasswordRequest $request): JsonResponse
+    {
+        $user = $request->user();
+ 
+        if (! Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'Password lama tidak sesuai.',
+            ], 422);
+        }
+ 
+        $user->update([
+            'password' => Hash::make($request->new_password),
+        ]);
+ 
+        // Hapus semua token lama agar user login ulang
+        $user->tokens()->delete();
+ 
+        return response()->json([
+            'message' => 'Password berhasil diubah. Silakan login kembali.',
+        ]);
+    }
 }
+

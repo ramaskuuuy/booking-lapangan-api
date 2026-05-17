@@ -6,42 +6,70 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\StoreBookingRequest;
 use App\Http\Requests\Booking\UpdateBookingRequest;
 use App\Models\Booking;
+use App\Models\Court;
 use App\Models\Payment;
+use App\Models\Promotion;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class BookingController extends Controller
 {
+    use AuthorizesRequests;
     /**
-     * Daftar booking milik user yang sedang login
+     * Daftar booking:
+     * - User biasa   → hanya booking milik sendiri
+     * - Pemilik/Admin → semua booking (bisa filter)
      */
     public function index(Request $request): JsonResponse
     {
-        $bookings = Booking::with(['court', 'payment'])
-            ->where('user_id', $request->user()->id)
+        $user  = $request->user();
+        $query = Booking::with(['court', 'payment']);
+
+        if ($user->hasAnyRole(['administrator', 'pemilik_lapangan'])) {
+            // Admin & pemilik lapangan bisa lihat semua booking
+            $query->when($request->user_id, fn($q, $v) => $q->where('user_id', $v));
+        } else {
+            // User biasa hanya lihat booking sendiri
+            $query->where('user_id', $user->id);
+        }
+
+        $bookings = $query
             ->when($request->status, fn($q, $v) => $q->byStatus($v))
+            ->when($request->court_id, fn($q, $v) => $q->where('court_id', $v))
             ->latest()
             ->paginate(10);
 
-        return response()->json($bookings);
+        return response()->json([
+            'data' => $bookings->items(),
+            'meta' => [
+                'current_page' => $bookings->currentPage(),
+                'last_page'    => $bookings->lastPage(),
+                'per_page'     => $bookings->perPage(),
+                'total'        => $bookings->total(),
+            ],
+        ]);
     }
 
     /**
-     * Buat booking baru
+     * Buat booking baru dengan harga dihitung otomatis di server
      */
     public function store(StoreBookingRequest $request): JsonResponse
     {
-        $validated = $request->validated();
+        $validated         = $request->validated();
         $validated['user_id'] = $request->user()->id;
 
-        // Cek ketersediaan court di waktu yang dipilih
+        // Cek konflik booking (overlap waktu) untuk court yang sama
         $conflict = Booking::where('court_id', $validated['court_id'])
             ->where('date', $validated['date'])
             ->where('status', '!=', 'cancelled')
             ->where(function ($q) use ($validated) {
-                $q->whereBetween('start_time', [$validated['start_time'], $validated['end_time']])
-                  ->orWhereBetween('end_time', [$validated['start_time'], $validated['end_time']]);
-            })->exists();
+                // Overlap terjadi jika: start_baru < end_lama AND end_baru > start_lama
+                $q->where('start_time', '<', $validated['end_time'])
+                  ->where('end_time', '>', $validated['start_time']);
+            })
+            ->exists();
 
         if ($conflict) {
             return response()->json([
@@ -49,9 +77,22 @@ class BookingController extends Controller
             ], 422);
         }
 
+        // Hitung total price berdasarkan durasi dan harga per jam court
+        $court    = Court::findOrFail($validated['court_id']);
+        $start    = Carbon::parse($validated['start_time']);
+        $end      = Carbon::parse($validated['end_time']);
+        $hours    = abs($end->diffInMinutes($start)) / 60;
+        $basePrice = round($hours * $court->price_per_hour, 2);
+
+        // Cek promo aktif untuk court tersebut
+        $promo = Promotion::where('court_id', $court->id)->active()->first();
+        $validated['total_price'] = $promo
+            ? $promo->applyDiscount($basePrice)
+            : $basePrice;
+
         $booking = Booking::create($validated);
 
-        // Otomatis buat record Payment dengan status unpaid
+        // Auto-buat record Payment dengan status unpaid
         Payment::create([
             'booking_id'     => $booking->id,
             'amount'         => $booking->total_price,
@@ -62,13 +103,16 @@ class BookingController extends Controller
         $booking->load(['court', 'payment']);
 
         return response()->json([
-            'message' => 'Booking berhasil dibuat.',
-            'booking' => $booking,
+            'message'        => 'Booking berhasil dibuat.',
+            'booking'        => $booking,
+            'promo_applied'  => $promo ? $promo->title : null,
+            'original_price' => $basePrice,
+            'final_price'    => $booking->total_price,
         ], 201);
     }
 
     /**
-     * Detail booking
+     * Detail booking (dengan authorization)
      */
     public function show(Booking $booking): JsonResponse
     {
@@ -80,7 +124,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Update booking (hanya admin)
+     * Update booking — hanya admin
      */
     public function update(UpdateBookingRequest $request, Booking $booking): JsonResponse
     {
@@ -88,26 +132,58 @@ class BookingController extends Controller
 
         return response()->json([
             'message' => 'Booking berhasil diperbarui.',
-            'booking' => $booking,
+            'booking' => $booking->fresh()->load(['court', 'payment']),
         ]);
     }
 
     /**
-     * Batalkan booking
+     * Batalkan booking (user pemilik atau admin)
      */
     public function cancel(Booking $booking): JsonResponse
     {
         $this->authorize('cancel', $booking);
 
         if ($booking->status === 'cancelled') {
-            return response()->json(['message' => 'Booking sudah dibatalkan sebelumnya.'], 422);
+            return response()->json([
+                'message' => 'Booking sudah dibatalkan sebelumnya.',
+            ], 422);
+        }
+
+        if ($booking->status === 'confirmed') {
+            return response()->json([
+                'message' => 'Booking yang sudah confirmed tidak bisa dibatalkan langsung. Hubungi admin.',
+            ], 422);
         }
 
         $booking->update(['status' => 'cancelled']);
 
         return response()->json([
             'message' => 'Booking berhasil dibatalkan.',
-            'booking' => $booking,
+            'booking' => $booking->fresh(),
+        ]);
+    }
+
+    /**
+     * Daftar booking per court — untuk Pemilik Lapangan & Admin
+     */
+    public function courtBookings(Request $request, Court $court): JsonResponse
+    {
+        $bookings = Booking::with(['user', 'payment'])
+            ->where('court_id', $court->id)
+            ->when($request->status, fn($q, $v) => $q->byStatus($v))
+            ->when($request->date,   fn($q, $v) => $q->where('date', $v))
+            ->latest()
+            ->paginate(10);
+
+        return response()->json([
+            'court' => $court->name,
+            'data'  => $bookings->items(),
+            'meta'  => [
+                'current_page' => $bookings->currentPage(),
+                'last_page'    => $bookings->lastPage(),
+                'per_page'     => $bookings->perPage(),
+                'total'        => $bookings->total(),
+            ],
         ]);
     }
 }

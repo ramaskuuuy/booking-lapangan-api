@@ -18,7 +18,7 @@ class StoreBookingRequest extends FormRequest
             'date'        => ['required', 'date', 'after_or_equal:today'],
             'start_time'  => ['required', 'date_format:H:i'],
             'end_time'    => ['required', 'date_format:H:i', 'after:start_time'],
-            'total_price' => ['required', 'numeric', 'min:0'],
+            
         ];
     }
 
