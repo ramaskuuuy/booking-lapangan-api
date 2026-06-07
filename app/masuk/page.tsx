@@ -17,18 +17,27 @@ function LoginForm() {
   const redirectTo = searchParams.get("redirect") ?? "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await login(email, password);
-      router.push(redirectTo);
-    } catch (err: any) {
-      setError(err.response?.data?.message ?? "Email atau password salah");
-    } finally {
-      setLoading(false);
+  e.preventDefault();
+  setError("");
+  setLoading(true);
+  try {
+    const data = await login(email, password);
+    
+    // Cek role setelah login
+    const roles: string[] = data.roles ?? [];
+    const isAdmin = roles.includes("administrator") || roles.includes("admin");
+    
+    if (isAdmin) {
+      router.push("/admin"); // ← admin ke dashboard admin
+    } else {
+      router.push(redirectTo); // ← user biasa ke halaman tujuan
     }
-  };
+  } catch (err: any) {
+    setError(err.response?.data?.message ?? "Email atau password salah");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
