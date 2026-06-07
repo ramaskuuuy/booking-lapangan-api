@@ -15,16 +15,42 @@ class CourtController extends Controller
      * Tampilkan daftar semua court (dengan filter opsional)
      */
     public function index(Request $request): JsonResponse
-    {
-        $courts = Court::query()
-            ->active()
-            ->when($request->sport_type, fn($q, $v) => $q->bySport($v))
-            ->when($request->type, fn($q, $v) => $q->where('type', $v))
-            ->with('promotions')
-            ->paginate(10);
+{
+    $courts = Court::query()
+        ->active()
 
-        return response()->json($courts);
-    }
+        ->when($request->filled('search'), function ($q) use ($request) {
+            $search = strtolower($request->search);
+
+            $q->where(function ($query) use ($search) {
+                $query->whereRaw('LOWER(name) LIKE ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(location) LIKE ?', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(sport_type) LIKE ?', ["%{$search}%"]);
+            });
+        })
+
+        ->when(
+            $request->filled('sport') || $request->filled('sport_type'),
+            function ($q) use ($request) {
+                $sport = $request->sport ?? $request->sport_type;
+
+                $q->whereRaw(
+                    'LOWER(sport_type) = ?',
+                    [strtolower($sport)]
+                );
+            }
+        )
+
+        ->when(
+            $request->filled('type'),
+            fn ($q) => $q->where('type', $request->type)
+        )
+
+        ->with('promotions')
+        ->paginate($request->get('per_page', 50));
+
+    return response()->json($courts);
+}
 
     /**
      * Simpan court baru (hanya admin / pemilik lapangan)
@@ -41,7 +67,7 @@ class CourtController extends Controller
 
         return response()->json([
             'message' => 'Court berhasil ditambahkan.',
-            'court'   => $court,
+            'court'   => $court->fresh(),
         ], 201);
     }
 
@@ -50,7 +76,10 @@ class CourtController extends Controller
      */
     public function show(Court $court): JsonResponse
     {
-        $court->load(['bookings' => fn($q) => $q->latest()->limit(5), 'promotions' => fn($q) => $q->active()]);
+        $court->load([
+            'bookings' => fn($q) => $q->latest()->limit(5),
+            'promotions' => fn($q) => $q->active()
+        ]);
 
         return response()->json($court);
     }
@@ -70,7 +99,7 @@ class CourtController extends Controller
 
         return response()->json([
             'message' => 'Court berhasil diperbarui.',
-            'court'   => $court,
+            'court'   => $court->fresh(),
         ]);
     }
 

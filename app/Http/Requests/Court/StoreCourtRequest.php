@@ -9,20 +9,38 @@ class StoreCourtRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Hanya admin dan pemilik_lapangan yang boleh membuat court
-        return $this->user()->hasAnyRole(['administrator', 'pemilik_lapangan']);
+        return $this->user()?->hasAnyRole(['administrator', 'pemilik_lapangan']) ?? false;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('facilities') && is_string($this->facilities)) {
+            $facilities = array_values(array_filter(array_map(
+                'trim',
+                explode(',', $this->facilities)
+            )));
+
+            $this->merge([
+                'facilities' => $facilities,
+            ]);
+        }
     }
 
     public function rules(): array
     {
         return [
             'name'           => ['required', 'string', 'max:255'],
+            'location'       => ['nullable', 'string', 'max:255'],
+            'description'    => ['nullable', 'string'],
             'sport_type'     => ['required', Rule::in(['padel', 'tennis', 'badminton', 'basketball', 'futsal'])],
             'type'           => ['required', Rule::in(['indoor', 'outdoor'])],
             'price_per_hour' => ['required', 'numeric', 'min:0'],
-            'facilities'     => ['nullable', 'string'],
+            'facilities'     => ['nullable', 'array'],
+            'facilities.*'   => ['string', 'max:255'],
+            'rating'         => ['nullable', 'numeric', 'min:0', 'max:5'],
+            'review_count'   => ['nullable', 'integer', 'min:0'],
             'image'          => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'is_active'      => ['boolean'],
+            'is_active'      => ['nullable', 'boolean'],
         ];
     }
 

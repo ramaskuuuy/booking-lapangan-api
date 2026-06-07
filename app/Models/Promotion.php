@@ -13,15 +13,17 @@ class Promotion extends Model
     use HasFactory;
 
     protected $fillable = [
-        'court_id',
-        'title',
-        'description',
-        'discount_percent',
-        'valid_from',
-        'valid_until',
-        'banner_image',
-        'is_active',
-    ];
+    'court_id',
+    'sport_type',
+    'title',
+    'code',
+    'description',
+    'discount_percent',
+    'valid_from',
+    'valid_until',
+    'banner_image',
+    'is_active',
+];
 
     protected function casts(): array
     {

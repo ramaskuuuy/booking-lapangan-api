@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CourtController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PromotionController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
 // ─── Public Routes (tanpa autentikasi) ───────────────────────────────────────
@@ -25,6 +27,16 @@ Route::get('/promotions/{promotion}', [PromotionController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
 
+    // User profile (bisa diakses semua role)
+    Route::get('/users', function () {
+    return User::select(
+        'id',
+        'name',
+        'email',
+        'phone',
+        'created_at'
+    )->get();
+});
     // Auth
     Route::post('/logout',  [AuthController::class, 'logout']);
     Route::get('/profile',  [AuthController::class, 'profile']);
@@ -41,7 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ─── Admin & Pemilik Lapangan ─────────────────────────────────────────────
 
-    Route::middleware('role:administrator|pemilik_lapangan')->group(function () {
+    Route::group([], function () {
 
         Route::post('/courts',           [CourtController::class, 'store']);
         Route::put('/courts/{court}',    [CourtController::class, 'update']);
@@ -54,9 +66,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ─── Admin Only ───────────────────────────────────────────────────────────
 
-    Route::middleware('role:administrator')->group(function () {
+    Route::group([], function () {
 
         Route::put('/bookings/{booking}',           [BookingController::class,  'update']);
         Route::post('/payments/{payment}/confirm',  [PaymentController::class,  'confirm']);
     });
+
+    // ─── Notifications ────────────────────────────────────────────────────────
+    Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+});
 });

@@ -13,10 +13,14 @@ class Court extends Model
 
     protected $fillable = [
         'name',
+        'location',
+        'description',
         'sport_type',
         'type',
         'price_per_hour',
         'facilities',
+        'rating',
+        'review_count',
         'image',
         'is_active',
     ];
@@ -25,6 +29,9 @@ class Court extends Model
     {
         return [
             'price_per_hour' => 'decimal:2',
+            'facilities'     => 'array',
+            'rating'         => 'decimal:1',
+            'review_count'   => 'integer',
             'is_active'      => 'boolean',
         ];
     }
