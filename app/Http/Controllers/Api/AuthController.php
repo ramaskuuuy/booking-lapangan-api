@@ -25,7 +25,6 @@ class AuthController extends Controller
             'phone'    => $request->phone,
         ]);
 
-        // Assign role default
         $user->assignRole('user');
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -33,6 +32,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Registrasi berhasil.',
             'user'    => $user,
+            'roles'   => $user->getRoleNames(),
             'token'   => $token,
         ], 201);
     }
@@ -48,12 +48,21 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $user  = Auth::user();
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'User tidak ditemukan.',
+            ], 500);
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'message' => 'Login berhasil.',
             'user'    => $user,
+            'roles'   => $user->getRoleNames(),
             'token'   => $token,
         ]);
     }
@@ -71,7 +80,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Tampilkan profil user yang sedang login
+     * Profil user yang login
      */
     public function profile(Request $request): JsonResponse
     {

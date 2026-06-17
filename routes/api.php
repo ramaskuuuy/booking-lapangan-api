@@ -1,81 +1,63 @@
 <?php
 
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CourtController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PromotionController;
-use App\Http\Controllers\Api\NotificationController;
-use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
-// ─── Public Routes (tanpa autentikasi) ───────────────────────────────────────
-
+// Public
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login',    [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login']);
 
-// Payment gateway webhook
+// Webhook
 Route::post('/payments/callback', [PaymentController::class, 'handleCallback']);
 
-// Court & Promotion bisa dilihat publik
-Route::get('/courts',                 [CourtController::class,     'index']);
-Route::get('/courts/{court}',         [CourtController::class,     'show']);
-Route::get('/promotions',             [PromotionController::class, 'index']);
+// Public data
+Route::get('/courts', [CourtController::class, 'index']);
+Route::get('/courts/{court}', [CourtController::class, 'show']);
+Route::get('/promotions', [PromotionController::class, 'index']);
 Route::get('/promotions/{promotion}', [PromotionController::class, 'show']);
 
-// ─── Authenticated Routes ─────────────────────────────────────────────────────
-
+// Authenticated
 Route::middleware('auth:sanctum')->group(function () {
-
-    // User profile (bisa diakses semua role)
-    Route::get('/users', function () {
-    return User::select(
-        'id',
-        'name',
-        'email',
-        'phone',
-        'created_at'
-    )->get();
-});
     // Auth
-    Route::post('/logout',  [AuthController::class, 'logout']);
-    Route::get('/profile',  [AuthController::class, 'profile']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/profile', [AuthController::class, 'profile']);
 
     // Booking
-    Route::get('/bookings',                    [BookingController::class, 'index']);
-    Route::post('/bookings',                   [BookingController::class, 'store']);
-    Route::get('/bookings/{booking}',          [BookingController::class, 'show']);
-    Route::post('/bookings/{booking}/cancel',  [BookingController::class, 'cancel']);
+    Route::get('/bookings', [BookingController::class, 'index']);
+    Route::post('/bookings', [BookingController::class, 'store']);
+    Route::get('/bookings/{booking}', [BookingController::class, 'show']);
+    Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancel']);
 
     // Payment
-    Route::post('/payments',          [PaymentController::class, 'store']);
+    Route::post('/payments', [PaymentController::class, 'store']);
     Route::get('/payments/{payment}', [PaymentController::class, 'show']);
 
-    // ─── Admin & Pemilik Lapangan ─────────────────────────────────────────────
-
-    Route::group([], function () {
-
-        Route::post('/courts',           [CourtController::class, 'store']);
-        Route::put('/courts/{court}',    [CourtController::class, 'update']);
+    // Admin & Owner
+    Route::middleware('role:administrator|pemilik_lapangan')->group(function () {
+        Route::post('/courts', [CourtController::class, 'store']);
+        Route::put('/courts/{court}', [CourtController::class, 'update']);
         Route::delete('/courts/{court}', [CourtController::class, 'destroy']);
 
-        Route::post('/promotions',              [PromotionController::class, 'store']);
-        Route::put('/promotions/{promotion}',   [PromotionController::class, 'update']);
-        Route::delete('/promotions/{promotion}',[PromotionController::class, 'destroy']);
+        Route::post('/promotions', [PromotionController::class, 'store']);
+        Route::put('/promotions/{promotion}', [PromotionController::class, 'update']);
+        Route::delete('/promotions/{promotion}', [PromotionController::class, 'destroy']);
     });
 
-    // ─── Admin Only ───────────────────────────────────────────────────────────
+    // Admin only
+Route::put('/bookings/{booking}', [BookingController::class, 'update']);
+Route::post('/payments/{payment}/confirm', [PaymentController::class, 'confirm']);
 
-    Route::group([], function () {
+Route::get('/admin/users', [AdminUserController::class, 'index']);
+Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole']);
 
-        Route::put('/bookings/{booking}',           [BookingController::class,  'update']);
-        Route::post('/payments/{payment}/confirm',  [PaymentController::class,  'confirm']);
-    });
-
-    // ─── Notifications ────────────────────────────────────────────────────────
-    Route::middleware('auth:sanctum')->group(function () {
+    // Notifications
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
-});
 });
