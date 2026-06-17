@@ -24,14 +24,22 @@ function LoginForm() {
     const data = await login(email, password);
     
     // Cek role setelah login
-    const roles: string[] = data.roles ?? [];
-    const isAdmin = roles.includes("administrator") || roles.includes("admin");
-    
-    if (isAdmin) {
-      router.push("/admin"); // ← admin ke dashboard admin
-    } else {
-      router.push(redirectTo); // ← user biasa ke halaman tujuan
-    }
+   const roles: string[] = data.roles ?? [];
+
+const isAdmin =
+  roles.includes("administrator") ||
+  roles.includes("admin");
+
+const isOwner =
+  roles.includes("pemilik_lapangan");
+
+if (isAdmin) {
+  router.push("/admin");
+} else if (isOwner) {
+  router.push("/owner");
+} else {
+  router.push(redirectTo);
+}
   } catch (err: any) {
     setError(err.response?.data?.message ?? "Email atau password salah");
   } finally {
