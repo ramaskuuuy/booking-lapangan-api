@@ -58,6 +58,14 @@ class Booking extends Model
         return $this->hasOne(Payment::class);
     }
 
+    /**
+     * Booking memiliki satu Review (1:1)
+     */
+    public function review(): HasOne
+    {
+        return $this->hasOne(Review::class);
+    }
+
     // ─── Scopes ───────────────────────────────────────────────────────────────
 
     /**

@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\ChangePasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +31,14 @@ class AuthController extends Controller
         $user->assignRole('user');
 
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        ActivityLog::create([
+            'user_id'     => $user->id,
+            'event'       => 'register',
+            'description' => "User '{$user->name}' mendaftar akun baru.",
+            'ip_address'  => $request->ip(),
+            'user_agent'  => $request->userAgent(),
+        ]);
 
         return response()->json([
             'message' => 'Registrasi berhasil.',
@@ -61,6 +70,14 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        ActivityLog::create([
+            'user_id'     => $user->id,
+            'event'       => 'login',
+            'description' => "User '{$user->name}' berhasil login.",
+            'ip_address'  => $request->ip(),
+            'user_agent'  => $request->userAgent(),
+        ]);
+
         return response()->json([
             'message' => 'Login berhasil.',
             'user'    => $user,
@@ -74,7 +91,17 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        ActivityLog::create([
+            'user_id'     => $user->id,
+            'event'       => 'logout',
+            'description' => "User '{$user->name}' logout.",
+            'ip_address'  => $request->ip(),
+            'user_agent'  => $request->userAgent(),
+        ]);
+
+        $user->currentAccessToken()->delete();
 
         return response()->json([
             'message' => 'Logout berhasil.',

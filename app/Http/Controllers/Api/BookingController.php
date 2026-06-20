@@ -18,11 +18,15 @@ class BookingController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $bookings = Booking::with(['court', 'payment'])
-            ->where('user_id', $request->user()->id)
+        $user = $request->user();
+
+        $bookings = Booking::with(['court', 'payment', 'review', 'user'])
+            ->when(!$user->hasRole('administrator'), function ($q) use ($user) {
+                return $q->where('user_id', $user->id);
+            })
             ->when($request->status, fn($q, $v) => $q->byStatus($v))
             ->latest()
-            ->paginate(10);
+            ->paginate($request->get('per_page', 10));
 
         return response()->json($bookings);
     }
@@ -65,7 +69,7 @@ class BookingController extends Controller
         Payment::create([
             'booking_id'     => $booking->id,
             'amount'         => $booking->total_price,
-            'payment_method' => '',
+            'payment_method' => 'QRIS',
             'status'         => 'unpaid',
         ]);
 

@@ -43,6 +43,19 @@ class User extends Authenticatable
         return $this->hasMany(Booking::class);
     }
 
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * User memiliki banyak Review yang ditulisnya (1:N)
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(Review::class);
+    }
+
     /**
      * User bisa menerima Notification (Polymorphic - bawaan Laravel)
      * Sudah di-handle otomatis oleh trait Notifiable.

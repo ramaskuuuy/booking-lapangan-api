@@ -13,6 +13,25 @@ use Illuminate\Support\Str;
 class PaymentController extends Controller
 {
     /**
+     * Tampilkan semua pembayaran (untuk Admin & Owner)
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $payments = Payment::with(['booking.user', 'booking.court'])
+            ->when($user && $user->hasRole('pemilik_lapangan') && !$user->hasRole('administrator'), function($q) use ($user) {
+                $q->whereHas('booking.court', function($query) use ($user) {
+                    $query->where('owner_id', $user->id);
+                });
+            })
+            ->latest()
+            ->paginate($request->get('per_page', 50));
+
+        return response()->json($payments);
+    }
+
+    /**
      * Inisiasi pembayaran untuk booking
      */
     public function store(StorePaymentRequest $request): JsonResponse
@@ -70,8 +89,15 @@ class PaymentController extends Controller
     /**
      * Konfirmasi pembayaran manual (oleh admin)
      */
-    public function confirm(Payment $payment): JsonResponse
+    public function confirm(Request $request, Payment $payment): JsonResponse
     {
+        $user = $request->user();
+        if ($user->hasRole('pemilik_lapangan') && !$user->hasRole('administrator')) {
+            $payment->load('booking.court');
+            if ($payment->booking->court->owner_id !== $user->id) {
+                return response()->json(['message' => 'Unauthorized.'], 403);
+            }
+        }
         if ($payment->status === 'paid') {
             return response()->json(['message' => 'Pembayaran sudah terkonfirmasi.'], 422);
         }
@@ -111,10 +137,17 @@ class PaymentController extends Controller
     /**
      * Daftar payment yang menunggu konfirmasi admin (status waiting_confirmation)
      */
-    public function pendingConfirmations(): JsonResponse
+    public function pendingConfirmations(Request $request): JsonResponse
     {
+        $user = $request->user();
+
         $payments = Payment::with(['booking.user', 'booking.court'])
             ->where('status', 'waiting_confirmation')
+            ->when($user && $user->hasRole('pemilik_lapangan') && !$user->hasRole('administrator'), function($q) use ($user) {
+                $q->whereHas('booking.court', function($query) use ($user) {
+                    $query->where('owner_id', $user->id);
+                });
+            })
             ->latest()
             ->paginate(10);
 
@@ -126,6 +159,14 @@ class PaymentController extends Controller
      */
     public function reject(Request $request, Payment $payment): JsonResponse
     {
+        $user = $request->user();
+        if ($user->hasRole('pemilik_lapangan') && !$user->hasRole('administrator')) {
+            $payment->load('booking.court');
+            if ($payment->booking->court->owner_id !== $user->id) {
+                return response()->json(['message' => 'Unauthorized.'], 403);
+            }
+        }
+
         if ($payment->status !== 'waiting_confirmation') {
             return response()->json([
                 'message' => 'Payment ini tidak dalam status menunggu konfirmasi.',

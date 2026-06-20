@@ -30,6 +30,7 @@ class UpdateCourtRequest extends FormRequest
     {
         return [
             'name'           => ['sometimes', 'string', 'max:255'],
+            'owner_id'       => ['nullable', 'exists:users,id'],
             'location'       => ['sometimes', 'nullable', 'string', 'max:255'],
             'description'    => ['sometimes', 'nullable', 'string'],
             'sport_type'     => ['sometimes', Rule::in(['padel', 'tennis', 'badminton', 'basketball', 'futsal'])],

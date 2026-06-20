@@ -30,6 +30,7 @@ class StoreCourtRequest extends FormRequest
     {
         return [
             'name'           => ['required', 'string', 'max:255'],
+            'owner_id'       => ['nullable', 'exists:users,id'],
             'location'       => ['nullable', 'string', 'max:255'],
             'description'    => ['nullable', 'string'],
             'sport_type'     => ['required', Rule::in(['padel', 'tennis', 'badminton', 'basketball', 'futsal'])],

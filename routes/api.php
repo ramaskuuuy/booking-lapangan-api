@@ -1,12 +1,19 @@
 <?php
 
 use App\Http\Controllers\Api\AdminUserController;
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CourtController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\OwnerBookingController;
+use App\Http\Controllers\Api\OwnerDashboardController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PromotionController;
+use App\Http\Controllers\Api\CourtOperationalHourController;
+use App\Http\Controllers\Api\AdminDashboardController;
+use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\OwnerReviewController;
 use Illuminate\Support\Facades\Route;
 
 // ─── Public Routes (tanpa autentikasi) ────────────────────────────────────────
@@ -23,6 +30,8 @@ Route::post('/payments/callback', [PaymentController::class, 'handleCallback']);
 // Court & Promotion bisa dilihat publik tanpa login
 Route::get('/courts',                 [CourtController::class,     'index']);
 Route::get('/courts/{court}',         [CourtController::class,     'show']);
+Route::get('/courts/{court}/availability', [CourtController::class,  'availability']);
+Route::get('/courts/{court}/reviews', [ReviewController::class,    'index']);
 Route::get('/promotions',             [PromotionController::class, 'index']);
 Route::get('/promotions/{promotion}', [PromotionController::class, 'show']);
 
@@ -41,6 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings',                  [BookingController::class, 'store']);
     Route::get('/bookings/{booking}',         [BookingController::class, 'show']);
     Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancel']);
+    Route::post('/bookings/{booking}/reviews',[ReviewController::class,  'store']);
 
     // ── Payment ───────────────────────────────────────────────────────────────
     Route::post('/payments',                        [PaymentController::class, 'store']);
@@ -73,15 +83,37 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/payments/{payment}/reject',     [PaymentController::class, 'reject']);
     });
 
+    // ─── Pemilik Lapangan Only ────────────────────────────────────────────────
+    Route::middleware('role:pemilik_lapangan')->group(function () {
+        Route::get('/owner/dashboard',          [OwnerDashboardController::class, 'index']);
+        Route::get('/owner/reports/revenue',    [OwnerDashboardController::class, 'revenueReport']);
+        Route::get('/owner/reports/transactions',[OwnerDashboardController::class, 'transactionReport']);
+        
+        Route::get('/owner/bookings',           [OwnerBookingController::class, 'index']);
+        Route::get('/owner/bookings/{booking}', [OwnerBookingController::class, 'show']);
+        Route::post('/owner/bookings/{booking}/confirm', [OwnerBookingController::class, 'confirm']);
+        Route::post('/owner/bookings/{booking}/reject',  [OwnerBookingController::class, 'reject']);
+
+        Route::get('/owner/reviews', [OwnerReviewController::class, 'index']);
+
+        // Jadwal Operasional
+        Route::get('/owner/courts/{court}/operational-hours', [CourtOperationalHourController::class, 'index']);
+        Route::put('/owner/courts/{court}/operational-hours', [CourtOperationalHourController::class, 'updateBatch']);
+    });
+
     // ─── Admin Only ───────────────────────────────────────────────────────────
-    // FIX: /admin/users dipindah ke sini agar pemilik_lapangan TIDAK bisa
-    //      mengubah role user lain (privilege escalation).
     Route::middleware('role:administrator')->group(function () {
+
+        Route::get('/admin/dashboard', [AdminDashboardController::class, 'index']);
+
+        Route::get('/admin/activity-logs', [ActivityLogController::class, 'index']);
+
         Route::put('/bookings/{booking}',          [BookingController::class,  'update']);
+        Route::get('/payments',                    [PaymentController::class,  'index']);
         Route::post('/payments/{payment}/confirm', [PaymentController::class,  'confirm']);
 
-        // Kelola user — hanya administrator
         Route::get('/admin/users',             [AdminUserController::class, 'index']);
         Route::put('/admin/users/{user}/role', [AdminUserController::class, 'updateRole']);
+        Route::delete('/admin/users/{user}',   [AdminUserController::class, 'destroy']);
     });
 });
