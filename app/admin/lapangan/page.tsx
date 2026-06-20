@@ -45,6 +45,7 @@ type FormState = {
   rating: string;
   description: string;
   is_active: boolean;
+  owner_id: string;
   image: File | null;
 };
 
@@ -58,6 +59,7 @@ const initialForm: FormState = {
   rating: "",
   description: "",
   is_active: true,
+  owner_id: "",
   image: null,
 };
 
@@ -70,6 +72,7 @@ export default function AdminLapangan() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [owners, setOwners] = useState<any[]>([]);
 
   const fetchCourts = async () => {
     const res = await authFetch(`${API_BASE}/courts?per_page=50`);
@@ -80,6 +83,14 @@ export default function AdminLapangan() {
 
   useEffect(() => {
     fetchCourts();
+    // Ambil daftar user untuk dropdown pemilik lapangan
+    authFetch(`${API_BASE}/admin/users`)
+      .then(res => res.json())
+      .then(data => {
+         const userList = data.data ?? [];
+         setOwners(userList.filter((u: any) => u.role === "pemilik_lapangan"));
+      })
+      .catch(() => {});
   }, []);
 
   const filtered = useMemo(
@@ -120,6 +131,7 @@ export default function AdminLapangan() {
       rating: String(court.rating ?? ""),
       description: court.description ?? "",
       is_active: Boolean(court.is_active),
+      owner_id: court.owner_id ? String(court.owner_id) : "",
       image: null,
     });
 
@@ -157,6 +169,7 @@ export default function AdminLapangan() {
       payload.append("rating", String(Number(form.rating || 0)));
       payload.append("description", form.description);
       payload.append("is_active", form.is_active ? "1" : "0");
+      payload.append("owner_id", form.owner_id);
 
       facilities.forEach((facility) => {
         payload.append("facilities[]", facility);
@@ -237,7 +250,7 @@ export default function AdminLapangan() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {["Nama", "Lokasi", "Sport", "Tipe", "Harga/Jam", "Rating", "Status", "Aksi"].map((h) => (
+              {["Nama", "Pemilik", "Lokasi", "Sport", "Tipe", "Harga/Jam", "Rating", "Status", "Aksi"].map((h) => (
                 <th key={h} className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase">
                   {h}
                 </th>
@@ -248,14 +261,14 @@ export default function AdminLapangan() {
             {loading ? (
               [...Array(5)].map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={8} className="py-3 px-4">
+                  <td colSpan={9} className="py-3 px-4">
                     <div className="h-4 bg-gray-100 rounded animate-pulse" />
                   </td>
                 </tr>
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-gray-400">
+                <td colSpan={9} className="py-10 text-center text-gray-400">
                   Belum ada lapangan
                 </td>
               </tr>
@@ -263,6 +276,11 @@ export default function AdminLapangan() {
               filtered.map((court) => (
                 <tr key={court.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4 font-semibold text-gray-900">{court.name}</td>
+                  <td className="py-3 px-4">
+                    <span className="text-xs font-semibold text-[#4a7c59] bg-green-50 px-2 py-1 rounded-md">
+                      {court.owner?.name ?? "Tidak ada"}
+                    </span>
+                  </td>
                   <td className="py-3 px-4 text-gray-500">{court.location ?? "-"}</td>
                   <td className="py-3 px-4 text-gray-500">{court.sport_type}</td>
                   <td className="py-3 px-4 text-gray-500 capitalize">{court.type}</td>
@@ -340,6 +358,22 @@ export default function AdminLapangan() {
                   {["futsal", "badminton", "basketball", "padel", "tenis"].map((s) => (
                     <option key={s} value={s.toLowerCase()}>
                       {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Pemilik Lapangan</label>
+                <select
+                  value={form.owner_id}
+                  onChange={(e) => setForm((p) => ({ ...p, owner_id: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59]"
+                >
+                  <option value="">Tanpa Pemilik (Milik Sistem)</option>
+                  {owners.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} ({o.email})
                     </option>
                   ))}
                 </select>

@@ -11,8 +11,8 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useMemo } from "react";
 import {
   getCourt,
   getPromotions,
@@ -21,9 +21,15 @@ import {
   type Promotion,
 } from "@/library/api";
 
+interface TimeSlot {
+  time: string;
+  available: boolean;
+}
+
 export default function BookingFormPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = Number(params.id);
 
   const [court, setCourt] = useState<Court | null>(null);
@@ -40,10 +46,46 @@ export default function BookingFormPage() {
   const [promoError, setPromoError] = useState("");
   const [promoTerpilih, setPromoTerpilih] = useState<Promotion | null>(null);
 
+  const [availability, setAvailability] = useState<TimeSlot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
   useEffect(() => {
+    // Prefill from URL if exists
+    const qTanggal = searchParams.get("tanggal");
+    const qWaktu = searchParams.get("waktu");
+    if (qTanggal) setTanggal(qTanggal);
+    if (qWaktu) setWaktuMulai(qWaktu);
+
     getCourt(id).then(setCourt).catch(() => {});
     getPromotions().then(setPromotions).catch(() => {});
-  }, [id]);
+  }, [id, searchParams]);
+
+  useEffect(() => {
+    if (!tanggal) {
+      setAvailability([]);
+      return;
+    }
+    
+    setLoadingSlots(true);
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"}/courts/${id}/availability?date=${tanggal}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.slots) {
+          setAvailability(data.slots);
+          // Auto select first available if currently selected is invalid or empty
+          const stillValid = data.slots.find((s: TimeSlot) => s.time === waktuMulai && s.available);
+          if (!stillValid) {
+            const firstAvail = data.slots.find((s: TimeSlot) => s.available);
+            setWaktuMulai(firstAvail ? firstAvail.time : "");
+          }
+        } else {
+          setAvailability([]);
+          setWaktuMulai("");
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingSlots(false));
+  }, [tanggal, id]);
 
   const durasiNum = Number(durasi) || 1;
   const subtotal = court ? Number(court.price_per_hour) * durasiNum : 0;
@@ -127,8 +169,28 @@ export default function BookingFormPage() {
     setPromoTerpilih(null);
   };
 
+  const isDurationValid = useMemo(() => {
+    if (!waktuMulai || availability.length === 0) return false;
+    const startIndex = availability.findIndex(s => s.time === waktuMulai);
+    if (startIndex === -1) return false;
+    
+    // Check if subsequent slots are available
+    for (let i = 0; i < durasiNum; i++) {
+      const slot = availability[startIndex + i];
+      if (!slot || !slot.available) {
+        return false;
+      }
+    }
+    return true;
+  }, [waktuMulai, durasiNum, availability]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isDurationValid) {
+      alert("Durasi yang dipilih melebihi waktu yang tersedia. Ada slot jam yang sudah di-booking orang lain.");
+      return;
+    }
+
     router.push(
       `/lapangan/${id}/konfirmasi?nama=${encodeURIComponent(
         nama
@@ -211,13 +273,24 @@ export default function BookingFormPage() {
                     <Clock size={16} className="text-gray-400" />
                     Waktu Mulai
                   </label>
-                  <input
-                    type="time"
+                  <select
                     value={waktuMulai}
                     onChange={(e) => setWaktuMulai(e.target.value)}
                     required
-                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59] focus:ring-1 focus:ring-[#4a7c59] transition"
-                  />
+                    disabled={loadingSlots || !tanggal}
+                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59] focus:ring-1 focus:ring-[#4a7c59] transition disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">Pilih Jam</option>
+                    {availability.map((slot) => (
+                      <option 
+                        key={slot.time} 
+                        value={slot.time} 
+                        disabled={!slot.available}
+                      >
+                        {slot.time} {slot.available ? "" : "(Sudah Dibooking)"}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -232,8 +305,14 @@ export default function BookingFormPage() {
                     value={durasi}
                     onChange={(e) => setDurasi(e.target.value)}
                     required
-                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59] focus:ring-1 focus:ring-[#4a7c59] transition"
+                    className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59] focus:ring-1 focus:ring-[#4a7c59] transition mb-2"
                   />
+                  {!isDurationValid && waktuMulai && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <XCircle size={13} />
+                      Durasi bentrok dengan jadwal yang sudah dibooking.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -299,7 +378,8 @@ export default function BookingFormPage() {
 
                 <button
                   type="submit"
-                  className="w-full bg-[#4a7c59] hover:bg-[#3a6347] text-white font-bold py-4 rounded-xl transition-colors duration-200 text-base"
+                  disabled={!isDurationValid || !tanggal || !waktuMulai}
+                  className="w-full bg-[#4a7c59] hover:bg-[#3a6347] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-colors duration-200 text-base"
                 >
                   Konfirmasi Booking
                 </button>

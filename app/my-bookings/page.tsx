@@ -1,12 +1,16 @@
 "use client";
 
 import Navbar from "@/components/Navbar";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, Star, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getImageUrl } from "@/library/api";
+import { authFetch as baseAuthFetch } from "@/library/api"; // I'll assume this exists, wait I'll define it locally since it doesn't exist here
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 const getToken = () => typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+const authFetch = (url: string, opts?: RequestInit) =>
+  fetch(url, { ...opts, headers: { Authorization: `Bearer ${getToken()}`, Accept: "application/json", ...(opts?.headers ?? {}) } });
 
 const statusColor: Record<string, string> = {
   confirmed: "bg-green-100 text-green-600 border border-green-200",
@@ -26,7 +30,14 @@ export default function MyBookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const [reviewModal, setReviewModal] = useState<any | null>(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+
+  const fetchBookings = () => {
+    setLoading(true);
     const token = getToken();
     if (!token) { setError("Silakan login terlebih dahulu."); setLoading(false); return; }
 
@@ -37,7 +48,39 @@ export default function MyBookingsPage() {
       .then(data => setBookings(data.data ?? []))
       .catch(() => setError("Gagal memuat riwayat booking."))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchBookings();
   }, []);
+
+  const submitReview = async () => {
+    if (!reviewModal) return;
+    setSubmittingReview(true);
+    setReviewError("");
+
+    try {
+      const res = await authFetch(`${API_BASE}/bookings/${reviewModal.id}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, comment }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Gagal mengirim ulasan.");
+      }
+
+      setReviewModal(null);
+      setRating(5);
+      setComment("");
+      fetchBookings();
+    } catch (err: any) {
+      setReviewError(err.message || "Terjadi kesalahan.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const total     = bookings.length;
   const pending   = bookings.filter(b => b.status === "pending").length;
@@ -144,11 +187,34 @@ export default function MyBookingsPage() {
                   </div>
 
                   {/* Divider */}
-                  <div className="border-t border-gray-100 pt-3">
-                    <p className="text-xs text-gray-400 mb-1">Total Biaya</p>
-                    <p className="text-xl font-extrabold text-[#4a7c59]">
-                      Rp {Number(booking.total_price).toLocaleString("id-ID")}
-                    </p>
+                  <div className="border-t border-gray-100 pt-3 flex justify-between items-end">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Total Biaya</p>
+                      <p className="text-xl font-extrabold text-[#4a7c59]">
+                        Rp {Number(booking.total_price).toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                    
+                    {booking.status === "completed" && !booking.review && (
+                      <button
+                        onClick={() => {
+                          setReviewModal(booking);
+                          setRating(5);
+                          setComment("");
+                          setReviewError("");
+                        }}
+                        className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5"
+                      >
+                        <Star size={16} fill="currentColor" />
+                        Beri Ulasan
+                      </button>
+                    )}
+                    {booking.review && (
+                      <div className="flex items-center gap-1 text-yellow-500 bg-yellow-50 px-3 py-1.5 rounded-lg border border-yellow-100">
+                        <Star size={14} fill="currentColor" />
+                        <span className="text-sm font-bold">{booking.review.rating}/5</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -156,6 +222,63 @@ export default function MyBookingsPage() {
           </div>
         )}
       </div>
+
+      {/* Review Modal */}
+      {reviewModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 relative shadow-xl">
+            <button
+              onClick={() => setReviewModal(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h2 className="text-xl font-extrabold text-gray-900 mb-2">Beri Ulasan Lapangan</h2>
+            <p className="text-sm text-gray-500 mb-6">Bagaimana pengalaman bermain Anda di {reviewModal.court?.name}?</p>
+
+            {reviewError && (
+              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">
+                {reviewError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setRating(star)}
+                  className="focus:outline-none transition-transform hover:scale-110"
+                >
+                  <Star
+                    size={40}
+                    className={`${star <= rating ? "text-yellow-400" : "text-gray-200"}`}
+                    fill={star <= rating ? "currentColor" : "none"}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Komentar (Opsional)</label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+                placeholder="Ceritakan pengalaman Anda di sini..."
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#4a7c59] resize-none"
+              />
+            </div>
+
+            <button
+              onClick={submitReview}
+              disabled={submittingReview}
+              className="w-full bg-[#4a7c59] hover:bg-[#3a6347] text-white font-bold py-3.5 rounded-xl transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {submittingReview ? <><Loader2 size={18} className="animate-spin" /> Mengirim...</> : "Kirim Ulasan"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

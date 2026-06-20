@@ -51,6 +51,14 @@ function VenueCard({ court }: { court: Court }) {
           <div className="flex items-center gap-2 mb-4">
             <span className="text-lg">{sportIconMap[court.sport_type] || "🏅"}</span>
             <span className="text-sm text-gray-500">{court.sport_type}</span>
+            {court.owner && (
+              <>
+                <span className="text-gray-300 mx-1">•</span>
+                <span className="text-xs font-semibold text-[#4a7c59]">
+                  {court.owner.name}
+                </span>
+              </>
+            )}
           </div>
 
           <p className="text-sm text-gray-500">

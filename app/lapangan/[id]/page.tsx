@@ -21,15 +21,17 @@ const sportIconMap: Record<string, string> = {
   Padel: "🏓", Futsal: "⚽", Basketball: "🏀", Badminton: "🏸", Tenis: "🎾",
 };
 
-const mockReviews = [
-  { nama: "Ahmad Pratama", rating: 5, komentar: "Lapangan sangat bagus dan bersih. Pelayanan ramah!" },
-  { nama: "Rama Pratama", rating: 5, komentar: "Harganya terjangkau, recommended!" },
-];
+// mockReviews dihapus karena sudah ada data real
 
 const kapasitasMap: Record<string, string> = {
   Futsal: "10 - 12 Orang", Basketball: "10 - 15 Orang",
   Badminton: "2 - 4 Orang", Padel: "4 - 6 Orang", Tenis: "2 - 4 Orang",
 };
+
+interface TimeSlot {
+  time: string;
+  available: boolean;
+}
 
 export default function VenueDetailPage() {
   const params = useParams();
@@ -38,13 +40,45 @@ export default function VenueDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tanggal, setTanggal] = useState("");
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [availability, setAvailability] = useState<TimeSlot[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   useEffect(() => {
     getCourt(id)
       .then(setCourt)
       .catch(() => setError("Lapangan tidak ditemukan."))
       .finally(() => setLoading(false));
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"}/courts/${id}/reviews`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.data) {
+          setReviews(data.data);
+        }
+      })
+      .catch(console.error);
   }, [id]);
+
+  useEffect(() => {
+    if (!tanggal) {
+      setAvailability([]);
+      return;
+    }
+    
+    setLoadingSlots(true);
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api"}/courts/${id}/availability?date=${tanggal}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.slots) {
+          setAvailability(data.slots);
+        } else {
+          setAvailability([]);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingSlots(false));
+  }, [tanggal, id]);
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
@@ -145,31 +179,75 @@ export default function VenueDetailPage() {
               <input
                 type="date"
                 value={tanggal}
+                min={new Date().toISOString().split("T")[0]}
                 onChange={(e) => setTanggal(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59] focus:ring-1 focus:ring-[#4a7c59] transition"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:border-[#4a7c59] focus:ring-1 focus:ring-[#4a7c59] transition mb-4"
               />
+
+              {tanggal && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-3 font-semibold">Jam Operasional</p>
+                  {loadingSlots ? (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {[...Array(12)].map((_, i) => (
+                        <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+                      ))}
+                    </div>
+                  ) : availability.length > 0 ? (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {availability.map((slot) => (
+                        <Link
+                          key={slot.time}
+                          href={slot.available ? `/lapangan/${court.id}/booking?tanggal=${tanggal}&waktu=${slot.time}` : "#"}
+                          className={`flex items-center justify-center py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                            slot.available
+                              ? "bg-green-50 text-green-700 border border-green-200 hover:bg-green-500 hover:text-white"
+                              : "bg-gray-100 text-gray-400 border border-transparent cursor-not-allowed opacity-60"
+                          }`}
+                          onClick={(e) => {
+                            if (!slot.available) e.preventDefault();
+                          }}
+                        >
+                          {slot.time}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-gray-400 text-sm">
+                      Semua jam sudah penuh atau lapangan tutup di tanggal ini.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Reviews */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h2 className="text-xl font-extrabold text-gray-900 mb-5">Reviews</h2>
-              <div className="space-y-5">
-                {mockReviews.map((r, i) => (
-                  <div key={i}>
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center shrink-0 text-gray-500 font-bold text-sm">
-                        {r.nama.charAt(0)}
+              <h2 className="text-xl font-extrabold text-gray-900 mb-5">Ulasan Pelanggan ({court.review_count || 0})</h2>
+              
+              {reviews.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <p>Belum ada ulasan untuk lapangan ini.</p>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {reviews.map((r, i) => (
+                    <div key={r.id || i}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center shrink-0 text-gray-500 font-bold text-sm">
+                          {(r.user?.name || "A").charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{r.user?.name || "Anonim"}</p>
+                          <StarRow count={r.rating} />
+                          {r.comment && <p className="text-sm text-gray-600 mt-2">{r.comment}</p>}
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900 text-sm">{r.nama}</p>
-                        <StarRow count={r.rating} />
-                        <p className="text-sm text-gray-600 mt-1">{r.komentar}</p>
-                      </div>
+                      {i < reviews.length - 1 && <div className="border-b border-gray-100 mt-4" />}
                     </div>
-                    {i < mockReviews.length - 1 && <div className="border-b border-gray-100 mt-4" />}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

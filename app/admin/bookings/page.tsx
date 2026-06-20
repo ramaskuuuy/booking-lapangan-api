@@ -37,11 +37,6 @@ export default function AdminBookings() {
     return matchSearch && matchStatus;
   });
 
-  const handleUpdateStatus = async (id: number, status: string) => {
-    await authFetch(`${API_BASE}/bookings/${id}`, { method: "PUT", body: JSON.stringify({ status }) });
-    fetchBookings();
-  };
-
   return (
     <div>
       <h1 className="text-2xl font-extrabold text-gray-900 mb-1">Manage Bookings</h1>
@@ -67,16 +62,16 @@ export default function AdminBookings() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {["Booking ID", "User", "Lapangan", "Tanggal", "Waktu", "Total", "Status", "Aksi"].map(h => (
+              {["Booking ID", "User", "Lapangan", "Tanggal", "Waktu", "Total", "Status"].map(h => (
                 <th key={h} className="text-left py-3 px-4 text-xs font-bold text-gray-500 uppercase">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? [...Array(5)].map((_, i) => (
-              <tr key={i}><td colSpan={8} className="py-3 px-4"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td></tr>
+              <tr key={i}><td colSpan={7} className="py-3 px-4"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td></tr>
             )) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="py-10 text-center text-gray-400">Belum ada booking</td></tr>
+              <tr><td colSpan={7} className="py-10 text-center text-gray-400">Belum ada booking</td></tr>
             ) : filtered.map((b, i) => (
               <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                 <td className="py-3 px-4 font-bold text-gray-900">BK{String(i+1).padStart(3,"0")}</td>
@@ -89,15 +84,6 @@ export default function AdminBookings() {
                   <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${statusColor[b.status] ?? "bg-gray-100 text-gray-600"}`}>
                     {b.status}
                   </span>
-                </td>
-                <td className="py-3 px-4">
-                  <select value={b.status} onChange={e => handleUpdateStatus(b.id, e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:border-[#4a7c59]">
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
                 </td>
               </tr>
             ))}
